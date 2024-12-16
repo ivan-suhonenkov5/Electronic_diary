@@ -1,12 +1,10 @@
-from alembic.util import status
 from flask import Blueprint, render_template, request, redirect, abort
 from flask_login import login_required, current_user
 from sqlalchemy import desc
 
 from ..extensions import db
 from ..forms import StudentForm, TeacherForm
-from ..models.post import Post
-from ..models.user import User
+from ..models.models import Post, User, Role
 
 post = Blueprint("post", __name__)
 
@@ -14,7 +12,11 @@ post = Blueprint("post", __name__)
 @post.route("/", methods=["POST", "GET"])
 def all():
     form = TeacherForm()
-    form.teacher.choices = [t.name for t in User.query.filter_by(status="teacher")]
+    # Выбираем пользователей с ролью "teacher"
+    teacher_role = Role.query.filter_by(name='teacher').first()
+    if not teacher_role:
+        abort(500, "Role 'teacher' not found in the database.")
+    form.teacher.choices = [t.name for t in User.query.filter_by(role_id=teacher_role.id).all()]
 
     if request.method == "POST":
         teacher = request.form["teacher"]
@@ -29,7 +31,12 @@ def all():
 @login_required
 def create():
     form = StudentForm()
-    form.student.choices = [s.name for s in User.query.filter_by(status="user")]
+    # Выбираем пользователей с ролью "student"
+    student_role = Role.query.filter_by(name='student').first()
+    if not student_role:
+        abort(500, "Role 'student' not found in the database.")
+    form.student.choices = [s.name for s in User.query.filter_by(role_id=student_role.id).all()]
+
     if request.method == "POST":
         subject = request.form.get("subject")
         student = request.form.get("student")
@@ -42,10 +49,10 @@ def create():
             db.session.commit()
             return redirect("/")
         except Exception as e:
+            db.session.rollback()
             print(str(e))
 
-    else:
-        return render_template("post/create.html", form=form)
+    return render_template("post/create.html", form=form)
 
 
 @post.route("/post/<int:id>/update", methods=["POST", "GET"])
@@ -53,12 +60,18 @@ def create():
 def update(id):
     post = Post.query.get(id)
 
-    if post.author.id == current_user.id or current_user.status == "teacher":
+    # Проверяем, является ли пользователь автором поста или имеет роль "teacher"
+    teacher_role = Role.query.filter_by(name='teacher').first()
+    if post.author.id == current_user.id or current_user.role_id == teacher_role.id:
         form = StudentForm()
+        student_role = Role.query.filter_by(name='student').first()
+        if not student_role:
+            abort(500, "Role 'student' not found in the database.")
+
         form.student.data = User.query.filter_by(id=post.student).first().name
-        form.student.choices = [s.name for s in User.query.filter_by(status="user")]
+        form.student.choices = [s.name for s in User.query.filter_by(role_id=student_role.id).all()]
+
         if request.method == "POST":
-            # Два способа обращения к данным (в случае ошибки поменять)
             post.subject = request.form.get("subject")
             student = request.form.get("student")
 
@@ -68,12 +81,12 @@ def update(id):
                 db.session.commit()
                 return redirect("/")
             except Exception as e:
+                db.session.rollback()
                 print(str(e))
-        else:  # Здесь можно передавать post_id=post.id => в update выводить post_id
+        else:
             return render_template("post/update.html", post=post, form=form)
     else:
         abort(403)
-
 
 
 @post.route("/post/<int:id>/delete", methods=["POST", "GET"])
@@ -81,12 +94,15 @@ def update(id):
 def delete(id):
     post = Post.query.get(id)
 
-    if post.author.id == current_user.id or current_user.status == "teacher":
+    # Проверяем, является ли пользователь автором поста или имеет роль "teacher"
+    teacher_role = Role.query.filter_by(name='teacher').first()
+    if post.author.id == current_user.id or current_user.role_id == teacher_role.id:
         try:
             db.session.delete(post)
             db.session.commit()
             return redirect("/")
         except Exception as e:
+            db.session.rollback()
             print(str(e))
             return str(e)
     else:

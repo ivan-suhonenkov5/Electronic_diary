@@ -1,9 +1,8 @@
-{% extends 'main/base.html' %} 
+{% extends 'main/base.html' %}
 
-{% block title %}Темы{% endblock %} 
+{% block title %}Темы{% endblock %}
 
 {% block style %}{% assets 'post_all_css' %}<link rel="stylesheet" href="{{ ASSET_URL }}">{% endassets %}{% endblock %}
-
 
 {% block content %}
 <form method="post" class="form-control d-flex flex-row gap-2" id="teacherForm">
@@ -37,7 +36,7 @@
             {% endwith %}
         </td>
         <td>
-            {% if current_user.is_authenticated and post.student == current_user.id or current_user.status == "teacher" %}
+            {% if current_user.is_authenticated and (post.student == current_user.id or current_user.role.name == "teacher") %}
             <a href="{{ url_for('post.update', id=post.id) }}" class="btn btn-sm btn-secondary"><span class="fa fa-edit"></span></a>
             <a href="{{ url_for('post.delete', id=post.id) }}" class="btn btn-sm btn-danger"><span class="fa fa-trash"></span></a>
             {% endif %}
